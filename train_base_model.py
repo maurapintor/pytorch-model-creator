@@ -6,9 +6,9 @@ import torch
 import argparse
 
 # local imports
-from subset_iterator import SubsetIterator
-from utils import train, test
-from models import mnist, cifar10
+from src.subset_iterator import SubsetIterator
+from src.utils import train, test
+from src.models import mnist, cifar10
 
 parser = argparse.ArgumentParser(description='Train base model.')
 parser.add_argument('--epochs',
@@ -71,7 +71,7 @@ parser.add_argument('--num_workers',
 parser.add_argument('--output_file',
                     default=None,
                     help='Name of the output file. The file will be stored '
-                         'in the directory `pretrained_models`')
+                         'in the directory `pretrained_models`.')
 
 args = parser.parse_args()
 
@@ -109,7 +109,7 @@ train_loader, valid_loader, test_loader = \
 
 if dataset == 'mnist':
     model = mnist(pretrained=False,
-                n_hiddens=[256, 256]).to(device)
+                  n_hiddens=[256, 256]).to(device)
 elif dataset == 'cifar10':
     model = cifar10(pretrained=False, n_channel=3).to(device)
 

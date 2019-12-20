@@ -4,9 +4,9 @@ from torch.optim.lr_scheduler import MultiStepLR
 from tqdm import tqdm
 import argparse
 
-from subset_iterator import SubsetIterator
-from utils import test
-from models import mnist, cifar10
+from src.subset_iterator import SubsetIterator
+from src.utils import test
+from src.models import mnist, cifar10
 
 
 def get_teacher_output(teacher_model, device, data_loader):
@@ -115,18 +115,27 @@ parser.add_argument('--num_workers',
                          '(default: 0).')
 parser.add_argument('--output_file',
                     default=None,
-                    default=None,
                     help='Name of the output file. The file will be stored '
                          'in the directory `pretrained_models`. Will be saved '
                          'with the suffix "distilled". ')
 parser.add_argument('--alpha',
                     type=float,
-                    default=0.9,
-                    help='')
+                    default=0.1,
+                    help='Weight for the teacher loss. If alpha is equal '
+                         'to 1, the loss is computed using only the soft labels '
+                         'coming from the teacher. If alpha is 0, '
+                         'the loss is computed with hard-labels only. If the '
+                         'value of alpha is between 0 and 1, the loss will '
+                         'incorporate both terms.')
 parser.add_argument('--temperature',
                     type=float,
-                    default=0.1,
-                    help='')
+                    default=1,
+                    help='Temperature of the softmax for the output scores '
+                         'of the teacher model (default: 1).')
+
+KD_loss = nn.KLDivLoss()(torch.log_softmax(outputs / T, dim=1),
+                         torch.softmax(teacher_outputs / T, dim=1)) * (alpha * T * T) + \
+          nn.functional.cross_entropy(outputs, labels) * (1. - alpha)
 
 args = parser.parse_args()
 
@@ -160,7 +169,7 @@ model = None
 if dataset == 'mnist':
     model = mnist(pretrained=False, n_hiddens=[256, 256])
 elif dataset == 'cifar10':
-    model = cifar10(pretrained=False, n_hiddens=[256, 256])
+    model = cifar10(pretrained=False, n_channel=3)
 
 if teacher_model is not None:
     model.load_state_dict(torch.load(teacher_model))
@@ -182,10 +191,11 @@ train_loader, valid_loader, test_loader = \
 
 teacher_outputs = get_teacher_output(model, device, train_loader)
 
+distilled = None
 if dataset == 'mnist':
     distilled = mnist(n_hiddens=64).to(device)
 elif dataset == 'cifar10':
-    distilled = cifar10(n_channels=3).to(device)
+    distilled = cifar10(n_channel=3).to(device)
 
 optim_kwargs = {'lr': lr, 'momentum': momentum}
 
