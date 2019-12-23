@@ -86,6 +86,12 @@ parser.add_argument('--output_file',
                     default=None,
                     help='Name of the output file. The file will be stored '
                          'in the directory `pretrained_models`.')
+parser.add_argument('--warm_start',
+                    default=False,
+                    action='store_true',
+                    help='Whether to init the weights with a pretrained '
+                         'model. Only settable if all classes are included '
+                         '(default: False).')
 
 args = parser.parse_args()
 
@@ -111,6 +117,12 @@ output_file = args.output_file if args.output_file is not None else dataset
 if robust is True:
     # add `robust` to the model name
     output_file += '_robust'
+pretrained = args.warm_start
+
+if pretrained is True and len(include_list) < 10:
+    raise ValueError("Pretrained model could be used only if "
+                     "the number of included classes is 10 "
+                     "(remove the `include_list` parameter.")
 
 device = torch.device("cuda" if use_cuda and torch.cuda.is_available()
                       else "cpu")
@@ -127,11 +139,13 @@ train_loader, valid_loader, test_loader = \
                               dataset=dataset)
 
 if dataset == 'mnist':
-    model = mnist(pretrained=False,
+    model = mnist(pretrained=pretrained,
                   n_hiddens=[256, 256],
                   n_class=len(include_list)).to(device)
 elif dataset == 'cifar10':
-    model = cifar10(pretrained=True, n_channel=128, num_classes=len(include_list)).to(device)
+    model = cifar10(pretrained=pretrained,
+                    n_channel=128,
+                    num_classes=len(include_list)).to(device)
 
 optim_kwargs = {'lr': lr, 'momentum': momentum}
 
