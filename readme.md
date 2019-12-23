@@ -25,6 +25,8 @@ output, then adds to the original loss the l2 norm of the gradients size
 with respect to input. This term should be computed with the first 
 backpropagation, then minimized applying another backprop.
 
+Dobule backpropagation is described [here](https://arxiv.org/pdf/1906.06637.pdf).
+
 ### Train the distilled model
 
 For training a distilled model, we need to use a model trained with 

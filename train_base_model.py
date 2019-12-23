@@ -108,6 +108,9 @@ scheduler_gamma = args.scheduler_gamma \
 robust = args.robust
 lambda_const = args.lambda_const
 output_file = args.output_file if args.output_file is not None else dataset
+if robust is True:
+    # add `robust` to the model name
+    output_file += '_robust'
 
 device = torch.device("cuda" if use_cuda and torch.cuda.is_available()
                       else "cpu")
@@ -125,9 +128,10 @@ train_loader, valid_loader, test_loader = \
 
 if dataset == 'mnist':
     model = mnist(pretrained=False,
-                  n_hiddens=[256, 256]).to(device)
+                  n_hiddens=[256, 256],
+                  n_class=len(include_list)).to(device)
 elif dataset == 'cifar10':
-    model = cifar10(pretrained=False, n_channel=3).to(device)
+    model = cifar10(pretrained=True, n_channel=128, num_classes=len(include_list)).to(device)
 
 optim_kwargs = {'lr': lr, 'momentum': momentum}
 
@@ -150,4 +154,5 @@ for epoch in range(1, epochs + 1):
         scheduler.step(epoch)
     test(model, device, test_loader, epoch, loss_fn)
 
-torch.save(model.state_dict(), "pretrained_models/{}.pt".format(output_file))
+model_name = "pretrained_models/{}.pt".format(output_file)
+torch.save(model.state_dict(), model_name)

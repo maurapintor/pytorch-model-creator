@@ -5,7 +5,6 @@ import torch
 
 model_urls = {
     'cifar10': 'http://ml.cs.tsinghua.edu.cn/~chenxi/pytorch-models/cifar10-d875770b.pth',
-    'cifar100': 'http://ml.cs.tsinghua.edu.cn/~chenxi/pytorch-models/cifar100-3a55a987.pth',
     'mnist': 'http://ml.cs.tsinghua.edu.cn/~chenxi/pytorch-models/mnist-b07bb66b.pth'
 }
 
@@ -47,30 +46,15 @@ def make_layers(cfg, batch_norm=False):
     return nn.Sequential(*layers)
 
 
-def cifar10(n_channel, pretrained=False):
+def cifar10(n_channel, pretrained=False, num_classes=10):
     cfg = [n_channel, n_channel, 'M',
            2 * n_channel, 2 * n_channel, 'M',
            4 * n_channel, 4 * n_channel, 'M',
            (8 * n_channel, 0), 'M']
     layers = make_layers(cfg, batch_norm=True)
-    model = CIFAR(layers, n_channel=8 * n_channel, num_classes=10)
+    model = CIFAR(layers, n_channel=8 * n_channel, num_classes=num_classes)
     if pretrained is True:
         m = model_zoo.load_url(model_urls['cifar10'], map_location=map_location)
-        state_dict = m.state_dict() if isinstance(m, nn.Module) else m
-        assert isinstance(state_dict, (dict, OrderedDict)), type(state_dict)
-        model.load_state_dict(state_dict)
-    return model
-
-
-def cifar100(n_channel, pretrained=False):
-    cfg = [n_channel, n_channel, 'M',
-           2 * n_channel, 2 * n_channel, 'M',
-           4 * n_channel, 4 * n_channel, 'M',
-           (8 * n_channel, 0), 'M']
-    layers = make_layers(cfg, batch_norm=True)
-    model = CIFAR(layers, n_channel=8 * n_channel, num_classes=100)
-    if pretrained is True:
-        m = model_zoo.load_url(model_urls['cifar100'])
         state_dict = m.state_dict() if isinstance(m, nn.Module) else m
         assert isinstance(state_dict, (dict, OrderedDict)), type(state_dict)
         model.load_state_dict(state_dict)
@@ -97,7 +81,6 @@ class MLP(nn.Module):
         layers['out'] = nn.Linear(current_dims, n_class)
 
         self.model = nn.Sequential(layers)
-        print(self.model)
 
     def forward(self, input):
         input = input.view(input.size(0), -1)

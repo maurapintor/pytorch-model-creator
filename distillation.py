@@ -163,9 +163,9 @@ kwargs_optim_dist = {
 
 model = None
 if dataset == 'mnist':
-    model = mnist(pretrained=False, n_hiddens=[256, 256])
+    model = mnist(pretrained=False, n_hiddens=[256, 256], n_class=len(include_list))
 elif dataset == 'cifar10':
-    model = cifar10(pretrained=False, n_channel=3)
+    model = cifar10(pretrained=False, n_channel=3, num_classes=len(include_list))
 
 if teacher_model is not None:
     model.load_state_dict(torch.load(teacher_model))
