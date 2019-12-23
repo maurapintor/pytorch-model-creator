@@ -6,6 +6,7 @@ import torch
 import argparse
 
 # local imports
+from src.regularization import train_regularized
 from src.subset_iterator import SubsetIterator
 from src.utils import train, test
 from src.models import mnist, cifar10
@@ -58,6 +59,12 @@ parser.add_argument('--momentum',
                     help='Momentum to use during training (default: 0).',
                     type=int,
                     default=0)
+parser.add_argument('--robust',
+                    default=False,
+                    action='store_true',
+                    help='Whether or not to train the model with double '
+                         'backprop, regularizing the gradient size wrt the '
+                         'input (default: False).')
 parser.add_argument('--use_cuda',
                     action='store_true',
                     help='Use cuda if available (default: True).',
@@ -91,6 +98,7 @@ scheduler_steps = args.scheduler_steps.split(',') \
     if args.scheduler_steps is not None else None
 scheduler_gamma = args.scheduler_gamma \
     if args.scheduler_gamma is not 0 else None
+robust = args.robust
 output_file = args.output_file if args.output_file is not None else dataset
 
 device = torch.device("cuda" if use_cuda and torch.cuda.is_available()
@@ -126,9 +134,13 @@ else:
 loss_fn = nn.CrossEntropyLoss()
 for epoch in range(1, epochs + 1):
     logging.info("Training epoch {}/{}".format(epoch, epochs + 1))
-    train(model, device, train_loader, optimizer, epoch, loss_fn)
+    if robust is False:
+        train(model, device, train_loader, optimizer, epoch, loss_fn)
+    else:
+        train_regularized(model, device, train_loader, optimizer, epoch, loss_fn)
     if scheduler:
         scheduler.step(epoch)
     test(model, device, test_loader, epoch, loss_fn)
 
+# todo lambda_const
 torch.save(model.state_dict(), "pretrained_models/{}.pt".format(output_file))

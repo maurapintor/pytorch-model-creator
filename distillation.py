@@ -133,10 +133,6 @@ parser.add_argument('--temperature',
                     help='Temperature of the softmax for the output scores '
                          'of the teacher model (default: 1).')
 
-KD_loss = nn.KLDivLoss()(torch.log_softmax(outputs / T, dim=1),
-                         torch.softmax(teacher_outputs / T, dim=1)) * (alpha * T * T) + \
-          nn.functional.cross_entropy(outputs, labels) * (1. - alpha)
-
 args = parser.parse_args()
 
 use_cuda = args.use_cuda and torch.cuda.is_available()
