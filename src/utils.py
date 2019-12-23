@@ -1,6 +1,16 @@
+from torchvision.models.resnet import BasicBlock
 from tqdm import tqdm
 import torch
+from torch import nn
 
+def get_layers(model):
+    for name, layer in model._modules.items():
+        # If it is a sequential, don't return its name
+        # but recursively register all it's module children
+        if isinstance(layer, nn.Sequential) or isinstance(layer, BasicBlock):
+            yield from [(":".join([name, l]), m) for (l, m) in get_layers(layer)]
+        else:
+            yield (name, layer)
 
 def train(model, device, train_loader, optimizer, epoch, loss_fn):
     model.train()
