@@ -30,6 +30,9 @@ class SubLoaderMNIST(torchvision.datasets.MNIST):
 
         self.targets = self.targets.tolist()
 
+        self.classes = [self.classes[i] for i in include_list]
+
+
 
 class SubLoaderCIFAR(torchvision.datasets.CIFAR10):
     def __init__(self, *args, include_list=range(10), nb_samples=None, **kwargs):
@@ -55,6 +58,8 @@ class SubLoaderCIFAR(torchvision.datasets.CIFAR10):
             self.targets = self.targets[indices]
 
         self.targets = self.targets.tolist()
+
+        self.classes = [self.classes[i] for i in include_list]
 
 
 class SubsetIterator:

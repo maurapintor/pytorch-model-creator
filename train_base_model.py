@@ -4,6 +4,7 @@ from torch import optim, nn
 from torch.optim.lr_scheduler import MultiStepLR
 import torch
 import argparse
+import json
 
 # local imports
 from src.regularization import train_regularized
@@ -101,7 +102,7 @@ epochs = args.epochs
 dataset = args.dataset
 nb_train = args.nb_train
 nb_test = args.nb_test
-include_list = list(map(int, args.include_list.split(','))) \
+include_list = [int(x) for x in args.include_list.split(',')] \
     if args.include_list is not 'all' else range(10)
 batch_size = args.batch_size
 lr = args.lr
@@ -138,6 +139,7 @@ train_loader, valid_loader, test_loader = \
         .get_train_valid_test(valid_size=0,
                               dataset=dataset)
 
+# todo n_hidden, n_channel
 if dataset == 'mnist':
     model = mnist(pretrained=pretrained,
                   n_hiddens=[256, 256],
@@ -170,3 +172,7 @@ for epoch in range(1, epochs + 1):
 
 model_name = "pretrained_models/{}.pt".format(output_file)
 torch.save(model.state_dict(), model_name)
+
+# save args
+with open('pretrained_models/{}_args.json'.format(output_file), 'w') as f:
+    json.dump(args.__dict__, f, indent=2)

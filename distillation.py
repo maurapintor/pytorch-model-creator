@@ -1,3 +1,7 @@
+import json
+import logging
+import os
+
 import torch
 from torch import nn, optim
 from torch.optim.lr_scheduler import MultiStepLR
@@ -132,6 +136,12 @@ parser.add_argument('--temperature',
                     default=1,
                     help='Temperature of the softmax for the output scores '
                          'of the teacher model (default: 1).')
+parser.add_argument('--teacher_args',
+                    default=None,
+                    help='Load stored args from training of the teacher '
+                         'model. Will be used for validation or for model '
+                         'loading in case the passed arguments could be '
+                         'retrieved from this file (default: None).')
 
 args = parser.parse_args()
 
@@ -156,6 +166,22 @@ temperature = args.temperature
 output_file = args.output_file if args.output_file is not None else dataset
 
 teacher_model = args.teacher_model
+teacher_args = args.teacher_args
+
+if teacher_args is not None or os.path.exists("pretrained_models/{}.json".format(dataset)):
+    args_f_name = teacher_args or os.path.exists("pretrained_models/{}.json".format(dataset))
+    # optionally load teacher arguments
+    with open(args_f_name, 'r') as f:
+        teacher_args = (json.load(f))
+    if dataset != teacher_args['dataset']:
+        raise ValueError("Teacher model was training with a different "
+                         "dataset.")
+    if args.include_list != teacher_args['include_list']:
+        logging.warning("Include list for the distilled model is different "
+                        "from the one of the teacher. Overriding argument "
+                        "`--include_list`.")
+        include_list = [int(x) for x in teacher_args['include_list'].split(',')
+                        ] if teacher_args['include_list'] is not 'all' else range(10)
 
 kwargs_optim_dist = {
     'lr': lr,
@@ -165,7 +191,7 @@ model = None
 if dataset == 'mnist':
     model = mnist(pretrained=False, n_hiddens=[256, 256], n_class=len(include_list))
 elif dataset == 'cifar10':
-    model = cifar10(pretrained=False, n_channel=3, num_classes=len(include_list))
+    model = cifar10(pretrained=False, n_channel=128, num_classes=len(include_list))
 
 if teacher_model is not None:
     model.load_state_dict(torch.load(teacher_model))
@@ -189,13 +215,13 @@ teacher_outputs = get_teacher_output(model, device, train_loader)
 
 distilled = None
 if dataset == 'mnist':
-    distilled = mnist(n_hiddens=64).to(device)
+    distilled = mnist(n_hiddens=[256, 256], n_class=len(include_list)).to(device)
 elif dataset == 'cifar10':
-    distilled = cifar10(n_channel=3).to(device)
+    distilled = cifar10(n_channel=128, num_classes=len(include_list)).to(device)
 
 optim_kwargs = {'lr': lr, 'momentum': momentum}
 
-optimizer = optim.SGD(model.parameters(), **optim_kwargs)
+optimizer = optim.SGD(distilled.parameters(), **optim_kwargs)
 if scheduler_steps is not None and scheduler_gamma is not 0:
     scheduler = MultiStepLR(optimizer,
                             milestones=scheduler_steps,
@@ -210,4 +236,4 @@ for e in range(1, epochs + 1):
         scheduler.step(e)
     test(distilled, device, test_loader, e, loss_fn)
 
-torch.save(distilled.state_dict(), "pretrained_models/{}_cnn_distilled.pt".format(output_file))
+torch.save(distilled.state_dict(), "pretrained_models/{}_distilled.pt".format(output_file))
