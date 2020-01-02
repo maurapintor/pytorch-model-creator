@@ -85,7 +85,7 @@ class SubsetIterator:
         self.include_list = include_list
         self.batch_size = batch_size
 
-    def get_train_valid_test(self, valid_size=0.2, dataset='mnist'):
+    def get_train_valid_test(self, valid_size=0.2, dataset='mnist', num_workers=0):
 
         # Download and load the training data
         if dataset == 'mnist':
@@ -115,10 +115,12 @@ class SubsetIterator:
 
         trainloader = torch.utils.data.DataLoader(trainset,
                                                   batch_size=self.batch_size,
-                                                  sampler=train_sampler)
+                                                  sampler=train_sampler,
+                                                  num_workers=num_workers)
         validloader = torch.utils.data.DataLoader(trainset,
                                                   batch_size=self.batch_size,
-                                                  sampler=valid_sampler)
+                                                  sampler=valid_sampler,
+                                                  num_workers=num_workers)
 
         # Download and load the test data
         if dataset == 'mnist':
@@ -140,6 +142,7 @@ class SubsetIterator:
 
         testloader = torch.utils.data.DataLoader(testset,
                                                  batch_size=self.batch_size,
-                                                 shuffle=True)
+                                                 shuffle=True,
+                                                 num_workers=num_workers)
 
         return trainloader, validloader, testloader

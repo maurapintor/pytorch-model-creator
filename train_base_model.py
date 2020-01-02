@@ -139,7 +139,8 @@ dataset_kwargs = {
 train_loader, valid_loader, test_loader = \
     SubsetIterator(**dataset_kwargs) \
         .get_train_valid_test(valid_size=0,
-                              dataset=dataset)
+                              dataset=dataset,
+                              num_workers=num_workers)
 
 # todo n_hidden, n_channel
 

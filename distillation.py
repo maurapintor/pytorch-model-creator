@@ -198,7 +198,8 @@ device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu
 
 train_loader, valid_loader, test_loader = \
     SubsetIterator(**kwargs_data).get_train_valid_test(valid_size=0,
-                                                       dataset=dataset)
+                                                       dataset=dataset,
+                                                       num_workers=num_workers)
 
 teacher_outputs = get_teacher_output(model, device, train_loader)
 
