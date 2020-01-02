@@ -4,7 +4,7 @@ from torch import optim, nn
 from torch.optim.lr_scheduler import MultiStepLR
 import torch
 import argparse
-import json
+from pymongo import MongoClient
 
 # local imports
 from src.regularization import train_regularized
@@ -140,6 +140,8 @@ train_loader, valid_loader, test_loader = \
                               dataset=dataset)
 
 # todo n_hidden, n_channel
+
+model = None
 if dataset == 'mnist':
     model = mnist(pretrained=pretrained,
                   n_hiddens=[256, 256],
@@ -173,6 +175,14 @@ for epoch in range(1, epochs + 1):
 model_name = "pretrained_models/{}.pt".format(output_file)
 torch.save(model.state_dict(), model_name)
 
-# save args
-with open('pretrained_models/{}_args.json'.format(output_file), 'w') as f:
-    json.dump(args.__dict__, f, indent=2)
+# store arguments as mongodb object
+args_dict = args.__dict__
+args_dict['model_path'] = model_name
+
+with MongoClient('localhost', 27017) as client:
+    db = client['sec-evals']
+    collection = db['models']
+
+    model_id = collection.insert_one(args_dict)
+
+logging.info("Model stored: {}".format(model_id))
