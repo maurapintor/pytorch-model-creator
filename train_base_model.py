@@ -1,4 +1,6 @@
 import logging
+logging.basicConfig()
+logging.getLogger().setLevel(logging.INFO)
 
 from torch import optim, nn
 from torch.optim.lr_scheduler import MultiStepLR
@@ -162,6 +164,7 @@ else:
     scheduler = None
 
 loss_fn = nn.CrossEntropyLoss()
+acc = test(model, device, test_loader, 0, loss_fn)
 for epoch in range(1, epochs + 1):
     logging.info("Training epoch {}/{}".format(epoch, epochs + 1))
     if robust is False:
@@ -170,7 +173,7 @@ for epoch in range(1, epochs + 1):
         train_regularized(model, device, train_loader, optimizer, epoch, loss_fn, lambda_const)
     if scheduler:
         scheduler.step(epoch)
-    test(model, device, test_loader, epoch, loss_fn)
+    acc = test(model, device, test_loader, epoch, loss_fn)
 
 model_name = "pretrained_models/{}.pt".format(output_file)
 torch.save(model.state_dict(), model_name)
@@ -178,6 +181,7 @@ torch.save(model.state_dict(), model_name)
 # store arguments as mongodb object
 args_dict = args.__dict__
 args_dict['model_path'] = model_name
+args_dict['final_acc'] = acc
 
 # distilled models will be saved with a
 #   different script
@@ -187,6 +191,29 @@ with MongoClient('localhost', 27017) as client:
     db = client['sec-evals']
     collection = db['models']
 
-    model_id = collection.insert_one(args_dict)
+    # check if another model exists
+    try:
+        already_stored = collection.find({
+            'dataset': dataset,
+            'include_list': args.include_list,
+            'distilled': False}).next()
+    except StopIteration:
+        already_stored = False
+
+    if already_stored is False:
+        model_id = collection.insert_one(args_dict)
+    else:
+        if already_stored and already_stored['final_acc'] < acc:
+            # replace model
+            logging.info("Found already stored model with lower accuracy. "
+                         "Removed old model in favor of the newly "
+                         "trained.")
+            model_id = collection.replace_one({'_id': already_stored['_id']},
+                                              args_dict)
+        else:
+            # keep only best model
+            logging.info("Found already stored model with better accuracy. "
+                         "Keeping best result.")
+            model_id = already_stored['_id']
 
 logging.info("Model stored: {}".format(model_id))

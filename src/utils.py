@@ -3,6 +3,7 @@ from tqdm import tqdm
 import torch
 from torch import nn
 
+
 def get_layers(model):
     for name, layer in model._modules.items():
         # If it is a sequential, don't return its name
@@ -11,6 +12,7 @@ def get_layers(model):
             yield from [(":".join([name, l]), m) for (l, m) in get_layers(layer)]
         else:
             yield (name, layer)
+
 
 def train(model, device, train_loader, optimizer, epoch, loss_fn):
     model.train()
@@ -62,3 +64,4 @@ def test(model, device, test_loader, epoch, loss_fn):
     print('\n[Test set] Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
+    return correct / len(test_loader.dataset)

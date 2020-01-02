@@ -1,4 +1,6 @@
 import logging
+logging.basicConfig()
+logging.getLogger().setLevel(logging.INFO)
 
 import torch
 from pymongo import MongoClient
@@ -217,11 +219,12 @@ else:
     scheduler = None
 
 loss_fn = nn.CrossEntropyLoss()
+acc = test(model, device, test_loader, 0, loss_fn)
 for e in range(1, epochs + 1):
     train_kd(distilled, device, teacher_outputs, optimizer, loss_fn_kd, train_loader, alpha, temperature)
     if scheduler:
         scheduler.step(e)
-    test(distilled, device, test_loader, e, loss_fn)
+    acc = test(distilled, device, test_loader, e, loss_fn)
 
 model_name = "pretrained_models/{}_distilled.pt".format(output_file)
 torch.save(distilled.state_dict(), model_name)
@@ -230,12 +233,36 @@ torch.save(distilled.state_dict(), model_name)
 args_dict = args.__dict__
 args_dict['model_path'] = model_name
 args_dict['distilled'] = True
+args_dict['final_acc'] = acc
 
 with MongoClient('localhost', 27017) as client:
     db = client['sec-evals']
     collection = db['models']
 
-    model_id = collection.insert_one(args_dict)
+    # check if another model exists
+    try:
+        already_stored = collection.find({
+            'dataset': dataset,
+            'include_list': args.include_list,
+            'distilled': True}).next()
+    except StopIteration:
+        already_stored = False
+
+    if already_stored is False:
+        model_id = collection.insert_one(args_dict)
+    else:
+        if already_stored and already_stored['final_acc'] < acc:
+            # replace model
+            logging.info("Found already stored model with lower accuracy. "
+                         "Removed old model in favor of the newly "
+                         "trained.")
+            model_id = collection.replace_one({'_id': already_stored['_id']},
+                                              args_dict)
+        else:
+            # keep only best model
+            logging.info("Found already stored model with better accuracy. "
+                         "Keeping best result.")
+            model_id = already_stored['_id']
 
 logging.info("Model stored: {}".format(model_id))
 
