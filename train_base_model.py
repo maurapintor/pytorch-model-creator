@@ -7,6 +7,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 import torch
 import argparse
 from pymongo import MongoClient
+import os
 
 # local imports
 from src.regularization import train_regularized
@@ -181,7 +182,7 @@ torch.save(model.state_dict(), model_name)
 
 # store arguments as mongodb object
 args_dict = args.__dict__
-args_dict['model_path'] = model_name
+args_dict['model_path'] = os.path.abspath(model_name)
 args_dict['final_acc'] = acc
 
 # distilled models will be saved with a

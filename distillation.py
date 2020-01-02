@@ -8,6 +8,7 @@ from torch import nn, optim
 from torch.optim.lr_scheduler import MultiStepLR
 from tqdm import tqdm
 import argparse
+import os
 
 from src.subset_iterator import SubsetIterator
 from src.utils import test
@@ -232,7 +233,7 @@ torch.save(distilled.state_dict(), model_name)
 
 # store arguments as mongodb object
 args_dict = args.__dict__
-args_dict['model_path'] = model_name
+args_dict['model_path'] = os.path.abspath(model_name)
 args_dict['distilled'] = True
 args_dict['final_acc'] = acc
 
