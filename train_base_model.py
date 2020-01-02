@@ -179,6 +179,10 @@ torch.save(model.state_dict(), model_name)
 args_dict = args.__dict__
 args_dict['model_path'] = model_name
 
+# distilled models will be saved with a
+#   different script
+args_dict['distilled'] = False
+
 with MongoClient('localhost', 27017) as client:
     db = client['sec-evals']
     collection = db['models']
