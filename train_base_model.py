@@ -198,7 +198,8 @@ with MongoClient('localhost', 27017) as client:
         already_stored = collection.find({
             'dataset': dataset,
             'include_list': args.include_list,
-            'distilled': False}).next()
+            'distilled': False,
+            'robust': robust}).next()
     except StopIteration:
         already_stored = False
 

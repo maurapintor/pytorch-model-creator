@@ -100,7 +100,7 @@ class SubsetIterator:
                                       download=True,
                                       train=True,
                                       nb_samples=self.nb_train,
-                                      transform=self.transform_train,
+                                      transform=self.transform_test,
                                       include_list=self.include_list)
         else:
             raise NotImplementedError
@@ -127,15 +127,15 @@ class SubsetIterator:
             testset = SubLoaderMNIST('~/.pytorch/MNIST/',
                                      download=True,
                                      train=False,
-                                     nb_samples=self.nb_train,
+                                     nb_samples=self.nb_test,
                                      transform=self.transform_train,
                                      include_list=self.include_list)
         elif dataset == 'cifar10':
             testset = SubLoaderCIFAR('~/.pytorch/CIFAR/',
                                      download=True,
                                      train=False,
-                                     nb_samples=self.nb_train,
-                                     transform=self.transform_train,
+                                     nb_samples=self.nb_test,
+                                     transform=self.transform_test,
                                      include_list=self.include_list)
         else:
             raise NotImplementedError

@@ -236,6 +236,8 @@ args_dict = args.__dict__
 args_dict['model_path'] = os.path.abspath(model_name)
 args_dict['distilled'] = True
 args_dict['final_acc'] = acc
+# robust model can be trained with the other script
+args_dict['robust'] = False
 
 with MongoClient('localhost', 27017) as client:
     db = client['sec-evals']
