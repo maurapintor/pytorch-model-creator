@@ -5,11 +5,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 import torch
 from pymongo import MongoClient
-from torch import nn, optim
-from torch.optim.lr_scheduler import MultiStepLR
-from tqdm import tqdm
 import argparse
-import os
 
 from src.subset_iterator import SubsetIterator
 from src.utils import test
