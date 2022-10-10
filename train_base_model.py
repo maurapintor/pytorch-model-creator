@@ -6,34 +6,28 @@ from torch import optim, nn
 from torch.optim.lr_scheduler import MultiStepLR
 import torch
 import argparse
-from pymongo import MongoClient
-import os
 
 # local imports
-from src.regularization import train_regularized
 from src.subset_iterator import SubsetIterator
 from src.utils import train, test
-from src.models import mnist, cifar10
+from src.models import mnist
 
 parser = argparse.ArgumentParser(description='Train base model.')
 parser.add_argument('--epochs',
                     type=int,
                     default=10,
                     help='Number of epochs for training (default: 10).')
-parser.add_argument('--dataset',
-                    help='Dataset to use for training (default: mnist).',
-                    choices=['mnist', 'cifar10'],
-                    default='mnist')
+
 parser.add_argument('--nb_train',
                     help='Number of samples to use for training '
-                         '(default: 10000).',
+                         '(default: 60000).',
                     type=int,
-                    default=10000)
+                    default=60000)
 parser.add_argument('--nb_test',
                     type=int,
                     help='Number of samples to use for testing '
-                         '(default: 2000)',
-                    default=2000)
+                         '(default: 10000)',
+                    default=10000)
 parser.add_argument('--include_list',
                     help='Classes to include in the training process, '
                          'separated by commas (default: all).',
@@ -57,25 +51,16 @@ parser.add_argument('--scheduler_gamma',
                     default=0)
 parser.add_argument('--weight_decay',
                     help='Weight decay to use as regularization (default: 0).',
-                    type=int,
+                    type=float,
                     default=0)
 parser.add_argument('--momentum',
                     help='Momentum to use during training (default: 0).',
-                    type=int,
+                    type=float,
                     default=0)
-parser.add_argument('--robust',
+parser.add_argument('--nesterov',
                     default=False,
                     action='store_true',
-                    help='Whether or not to train the model with double '
-                         'backprop, regularizing the gradient size wrt the '
-                         'input (default: False).')
-parser.add_argument('--lambda_const',
-                    type=float,
-                    default=0.1,
-                    help='Lambda constant for regularization, will '
-                         'multiply the gradient L2 norm wrt to input '
-                         'in the total loss . Will be ignored if '
-                         'training mode is not set to `robust` (default: 0.1).')
+                    help='Nesterov for SGD (default: False).')
 parser.add_argument('--use_cuda',
                     action='store_true',
                     help='Use cuda if available (default: True).',
@@ -90,23 +75,17 @@ parser.add_argument('--output_file',
                     default=None,
                     help='Name of the output file. The file will be stored '
                          'in the directory `pretrained_models`.')
-parser.add_argument('--warm_start',
-                    default=False,
-                    action='store_true',
-                    help='Whether to init the weights with a pretrained '
-                         'model. Only settable if all classes are included '
-                         '(default: False).')
 
 args = parser.parse_args()
 
 use_cuda = args.use_cuda and torch.cuda.is_available()
 num_workers = args.num_workers
 epochs = args.epochs
-dataset = args.dataset
+dataset = "mnist"
 nb_train = args.nb_train
 nb_test = args.nb_test
 include_list = [int(x) for x in args.include_list.split(',')] \
-    if args.include_list is not 'all' else range(10)
+    if args.include_list != 'all' else range(10)
 batch_size = args.batch_size
 lr = args.lr
 momentum = args.momentum
@@ -114,19 +93,9 @@ weight_decay = args.weight_decay
 scheduler_steps = args.scheduler_steps.split(',') \
     if args.scheduler_steps is not None else None
 scheduler_gamma = args.scheduler_gamma \
-    if args.scheduler_gamma is not 0 else None
-robust = args.robust
-lambda_const = args.lambda_const
+    if args.scheduler_gamma != 0 else None
+nesterov = args.nesterov
 output_file = args.output_file if args.output_file is not None else dataset
-if robust is True:
-    # add `robust` to the model name
-    output_file += '_robust'
-pretrained = args.warm_start
-
-if pretrained is True and len(include_list) < 10:
-    raise ValueError("Pretrained model could be used only if "
-                     "the number of included classes is 10 "
-                     "(remove the `include_list` parameter.")
 
 device = torch.device("cuda" if use_cuda and torch.cuda.is_available()
                       else "cpu")
@@ -143,22 +112,14 @@ train_loader, valid_loader, test_loader = \
                               dataset=dataset,
                               num_workers=num_workers)
 
-# todo n_hidden, n_channel
-
 model = None
 if dataset == 'mnist':
-    model = mnist(pretrained=pretrained,
-                  n_hiddens=[256, 256],
-                  n_class=len(include_list)).to(device)
-elif dataset == 'cifar10':
-    model = cifar10(pretrained=pretrained,
-                    n_channel=128,
-                    num_classes=len(include_list)).to(device)
+    model = mnist().to(device)
 
-optim_kwargs = {'lr': lr, 'momentum': momentum}
+optim_kwargs = {'lr': lr, 'momentum': momentum, 'nesterov': nesterov}
 
 optimizer = optim.SGD(model.parameters(), **optim_kwargs)
-if scheduler_steps is not None and scheduler_gamma is not 0:
+if scheduler_steps is not None and scheduler_gamma != 0:
     scheduler = MultiStepLR(optimizer,
                             milestones=scheduler_steps,
                             gamma=scheduler_gamma)
@@ -169,54 +130,10 @@ loss_fn = nn.CrossEntropyLoss()
 acc = test(model, device, test_loader, 0, loss_fn)
 for epoch in range(1, epochs + 1):
     logging.info("Training epoch {}/{}".format(epoch, epochs + 1))
-    if robust is False:
-        train(model, device, train_loader, optimizer, epoch, loss_fn)
-    else:
-        train_regularized(model, device, train_loader, optimizer, epoch, loss_fn, lambda_const)
+    train(model, device, train_loader, optimizer, epoch, loss_fn)
     if scheduler:
         scheduler.step(epoch)
     acc = test(model, device, test_loader, epoch, loss_fn)
 
 model_name = "pretrained_models/{}.pt".format(output_file)
 torch.save(model.state_dict(), model_name)
-
-# store arguments as mongodb object
-args_dict = args.__dict__
-args_dict['model_path'] = os.path.abspath(model_name)
-args_dict['final_acc'] = acc
-
-# distilled models will be saved with a
-#   different script
-args_dict['distilled'] = False
-
-with MongoClient('localhost', 27017) as client:
-    db = client['sec-evals']
-    collection = db['models']
-
-    # check if another model exists
-    try:
-        already_stored = collection.find({
-            'dataset': dataset,
-            'include_list': args.include_list,
-            'distilled': False,
-            'robust': robust}).next()
-    except StopIteration:
-        already_stored = False
-
-    if already_stored is False:
-        model_id = collection.insert_one(args_dict)
-    else:
-        if already_stored and already_stored['final_acc'] < acc:
-            # replace model
-            logging.info("Found already stored model with lower accuracy. "
-                         "Removed old model in favor of the newly "
-                         "trained.")
-            model_id = collection.replace_one({'_id': already_stored['_id']},
-                                              args_dict)
-        else:
-            # keep only best model
-            logging.info("Found already stored model with better accuracy. "
-                         "Keeping best result.")
-            model_id = already_stored['_id']
-
-logging.info("Model stored: {}".format(model_id))

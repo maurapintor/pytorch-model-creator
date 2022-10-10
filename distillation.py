@@ -8,11 +8,10 @@ from torch import nn, optim
 from torch.optim.lr_scheduler import MultiStepLR
 from tqdm import tqdm
 import argparse
-import os
 
 from src.subset_iterator import SubsetIterator
 from src.utils import test
-from src.models import mnist, cifar10
+from src.models import mnist
 
 
 def get_teacher_output(teacher_model, device, data_loader):
@@ -61,20 +60,16 @@ parser.add_argument('--epochs',
                     type=int,
                     default=10,
                     help='Number of epochs for training (default: 10).')
-parser.add_argument('--dataset',
-                    help='Dataset to use for training (default: mnist).',
-                    choices=['mnist', 'cifar10'],
-                    default='mnist')
 parser.add_argument('--nb_train',
                     help='Number of samples to use for training '
-                         '(default: 10000).',
+                         '(default: 60000).',
                     type=int,
-                    default=10000)
+                    default=60000)
 parser.add_argument('--nb_test',
                     type=int,
                     help='Number of samples to use for testing '
-                         '(default: 2000)',
-                    default=2000)
+                         '(default: 10000)',
+                    default=10000)
 parser.add_argument('--include_list',
                     help='Classes to include in the training process, '
                          'separated by commas (default: all).',
@@ -98,12 +93,16 @@ parser.add_argument('--scheduler_gamma',
                     default=0)
 parser.add_argument('--weight_decay',
                     help='Weight decay to use as regularization (default: 0).',
-                    type=int,
+                    type=float,
                     default=0)
 parser.add_argument('--momentum',
                     help='Momentum to use during training (default: 0).',
-                    type=int,
+                    type=float,
                     default=0)
+parser.add_argument('--nesterov',
+                    default=False,
+                    action='store_true',
+                    help='Nesterov for SGD (default: False).')
 parser.add_argument('--use_cuda',
                     action='store_true',
                     help='Use cuda if available (default: True).',
@@ -127,19 +126,23 @@ parser.add_argument('--alpha',
                          'coming from the teacher. If alpha is 0, '
                          'the loss is computed with hard-labels only. If the '
                          'value of alpha is between 0 and 1, the loss will '
-                         'incorporate both terms.')
+                         'incorporate both terms. (default: 0.1)')
 parser.add_argument('--temperature',
                     type=float,
                     default=1,
                     help='Temperature of the softmax for the output scores '
                          'of the teacher model (default: 1).')
+parser.add_argument('--teacher',
+                    type=str,
+                    required=True,
+                    help='Path of the pretrained teacher parameters.')
 
 args = parser.parse_args()
 
 use_cuda = args.use_cuda and torch.cuda.is_available()
 num_workers = args.num_workers
 epochs = args.epochs
-dataset = args.dataset
+dataset = "mnist"
 nb_train = args.nb_train
 nb_test = args.nb_test
 include_list = list(map(int, args.include_list.split(','))) \
@@ -148,6 +151,7 @@ batch_size = args.batch_size
 lr = args.lr
 momentum = args.momentum
 weight_decay = args.weight_decay
+nesterov = args.nesterov
 scheduler_steps = args.scheduler_steps.split(',') \
     if args.scheduler_steps is not None else None
 scheduler_gamma = args.scheduler_gamma \
@@ -155,25 +159,9 @@ scheduler_gamma = args.scheduler_gamma \
 alpha = args.alpha
 temperature = args.temperature
 output_file = args.output_file if args.output_file is not None else dataset
+model_path = args.teacher
 
-teacher_model_params = None
-with MongoClient('localhost', 27017) as client:
-    db = client['sec-evals']
-    collection = db['models']
-
-    try:
-        teacher_model_params = collection.find({
-            'dataset': dataset,
-            'include_list': args.include_list}).next()
-    except StopIteration:
-        raise ValueError("Pretrained model not found. Please train "
-                         "model with the same parameters, using the "
-                         "script `train_base_model.py` and the "
-                         "same dataset and include_list as the "
-                         "desired distilled model.")
-    else:
-        logging.info("Loading stored model: {}".format(teacher_model_params['_id']))
-
+teacher_model_params = {'model_path': model_path}
 
 kwargs_optim_dist = {
     'lr': lr,
@@ -181,9 +169,7 @@ kwargs_optim_dist = {
 
 model = None
 if dataset == 'mnist':
-    model = mnist(pretrained=False, n_hiddens=[256, 256], n_class=len(include_list))
-elif dataset == 'cifar10':
-    model = cifar10(pretrained=False, n_channel=128, num_classes=len(include_list))
+    model = mnist()
 
 if teacher_model_params is not None:
     model.load_state_dict(torch.load(teacher_model_params['model_path']))
@@ -206,14 +192,12 @@ teacher_outputs = get_teacher_output(model, device, train_loader)
 
 distilled = None
 if dataset == 'mnist':
-    distilled = mnist(n_hiddens=[256, 256], n_class=len(include_list)).to(device)
-elif dataset == 'cifar10':
-    distilled = cifar10(n_channel=128, num_classes=len(include_list)).to(device)
+    distilled = mnist().to(device)
 
-optim_kwargs = {'lr': lr, 'momentum': momentum}
+optim_kwargs = {'lr': lr, 'momentum': momentum, 'nesterov': nesterov}
 
 optimizer = optim.SGD(distilled.parameters(), **optim_kwargs)
-if scheduler_steps is not None and scheduler_gamma is not 0:
+if scheduler_steps is not None and scheduler_gamma != 0:
     scheduler = MultiStepLR(optimizer,
                             milestones=scheduler_steps,
                             gamma=scheduler_gamma)
@@ -230,43 +214,3 @@ for e in range(1, epochs + 1):
 
 model_name = "pretrained_models/{}_distilled.pt".format(output_file)
 torch.save(distilled.state_dict(), model_name)
-
-# store arguments as mongodb object
-args_dict = args.__dict__
-args_dict['model_path'] = os.path.abspath(model_name)
-args_dict['distilled'] = True
-args_dict['final_acc'] = acc
-# robust model can be trained with the other script
-args_dict['robust'] = False
-
-with MongoClient('localhost', 27017) as client:
-    db = client['sec-evals']
-    collection = db['models']
-
-    # check if another model exists
-    try:
-        already_stored = collection.find({
-            'dataset': dataset,
-            'include_list': args.include_list,
-            'distilled': True}).next()
-    except StopIteration:
-        already_stored = False
-
-    if already_stored is False:
-        model_id = collection.insert_one(args_dict)
-    else:
-        if already_stored and already_stored['final_acc'] < acc:
-            # replace model
-            logging.info("Found already stored model with lower accuracy. "
-                         "Removed old model in favor of the newly "
-                         "trained.")
-            model_id = collection.replace_one({'_id': already_stored['_id']},
-                                              args_dict)
-        else:
-            # keep only best model
-            logging.info("Found already stored model with better accuracy. "
-                         "Keeping best result.")
-            model_id = already_stored['_id']
-
-logging.info("Model stored: {}".format(model_id))
-
