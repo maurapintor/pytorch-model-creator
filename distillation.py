@@ -22,9 +22,8 @@ def get_teacher_output(teacher_model, device, data_loader):
         teacher_outputs[i * len(data):(i + 1) * (len(data)), :] = teacher_model(data).data
     return teacher_outputs
 
-
 def loss_fn_distill(outputs, labels, teacher_outputs, alpha, T):
-    loss = nn.functional.cross_entropy(outputs, teacher_outputs/T) * (alpha) + \
+    loss = nn.functional.cross_entropy(outputs, torch.exp(teacher_outputs/T)) * (alpha) + \
               nn.functional.cross_entropy(outputs, labels) * (1. - alpha)
     return loss.mean()
 
@@ -51,7 +50,7 @@ def train_distilled(model, device, teacher_outputs, optimizer, loss_fn, data_loa
             data, labels = data.to(device), labels.to(device)
             output = model(data)
             teacher_output = teacher_outputs[i * len(data):(i + 1) * (len(data)), :]
-            loss = loss_fn(output, labels, teacher_output, alpha, T)
+            loss = loss_fn(outputs=output, labels=labels, teacher_outputs=teacher_output, alpha=alpha, T=T)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
