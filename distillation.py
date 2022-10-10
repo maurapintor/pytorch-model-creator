@@ -24,8 +24,7 @@ def get_teacher_output(teacher_model, device, data_loader):
 
 
 def loss_fn_distill(outputs, labels, teacher_outputs, alpha, T):
-    teacher_outputs.requires_grad = True
-    loss = nn.functional.cross_entropy(outputs, teacher_outputs) * (alpha) + \
+    loss = nn.functional.cross_entropy(outputs, teacher_outputs/T) * (alpha) + \
               nn.functional.cross_entropy(outputs, labels) * (1. - alpha)
     return loss.mean()
 
