@@ -25,14 +25,14 @@ def get_teacher_output(teacher_model, device, data_loader):
 
 def loss_fn_distill(outputs, labels, teacher_outputs, alpha, T):
     teacher_outputs.requires_grad = True
-    loss = torch.log_softmax(teacher_outputs / T, dim=1) * (alpha) #+ \
-              #nn.functional.cross_entropy(outputs, labels) * (1. - alpha)
+    loss = CrossEntropyWithLogits(temperature=T)(outputs, teacher_outputs) * (alpha) + \
+              nn.functional.cross_entropy(outputs, labels) * (1. - alpha)
     return loss.mean()
 
 
 
 class CrossEntropyWithLogits(nn.Module):
-    def __init__(self, weight=None, temperature=100):
+    def __init__(self, temperature=100):
         super(CrossEntropyWithLogits, self).__init__()
         self.T = temperature
 
@@ -45,14 +45,14 @@ class CrossEntropyWithLogits(nn.Module):
         return torch.mean(loss)
 
 
-def train_distilled(model, device, teacher_outputs, optimizer, loss_fn, data_loader):
+def train_distilled(model, device, teacher_outputs, optimizer, loss_fn, data_loader, alpha=1, T=100):
     model.train()
     with tqdm(total=len(data_loader)) as t:
         for i, (data, labels) in enumerate(data_loader):
             data, labels = data.to(device), labels.to(device)
             output = model(data)
             teacher_output = teacher_outputs[i * len(data):(i + 1) * (len(data)), :]
-            loss = loss_fn(output, teacher_output)
+            loss = loss_fn(output, labels, teacher_output, alpha, T)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -218,7 +218,7 @@ else:
 loss_fn = nn.CrossEntropyLoss()
 acc = test(model, device, test_loader, 0, loss_fn)
 for e in range(1, epochs + 1):
-    train_distilled(distilled, device, teacher_outputs, optimizer, CrossEntropyWithLogits(), train_loader)
+    train_distilled(distilled, device, teacher_outputs, optimizer, loss_fn_distill, train_loader, alpha=alpha, T=temperature)
     if scheduler:
         scheduler.step(e)
     acc = test(distilled, device, test_loader, e, loss_fn)
