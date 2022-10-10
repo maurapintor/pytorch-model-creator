@@ -23,18 +23,11 @@ def get_teacher_output(teacher_model, device, data_loader):
     return teacher_outputs
 
 
-def loss_fn_kd(outputs, labels, teacher_outputs, alpha, T):
-    """
-    Compute the knowledge-distillation (KD) loss given outputs, labels.
-    "Hyperparameters": temperature and alpha
-    NOTE: the KL Divergence for PyTorch comparing the softmaxs of teacher
-    and student expects the input tensor to be log probabilities! See Issue #2
-    """
-    KD_loss = nn.KLDivLoss()(torch.log_softmax(outputs / T, dim=1),
-                             torch.softmax(teacher_outputs / T, dim=1)) * (alpha * T * T) + \
+def loss_fn_distill(outputs, labels, teacher_outputs, alpha, T):
+    loss = torch.softmax(teacher_outputs / T, dim=1) * (alpha) + \
               nn.functional.cross_entropy(outputs, labels) * (1. - alpha)
 
-    return KD_loss
+    return loss
 
 
 def train_kd(model, device, teacher_outputs, optimizer, loss_fn_kd, data_loader, alpha, T):
@@ -154,7 +147,7 @@ nesterov = args.nesterov
 scheduler_steps = args.scheduler_steps.split(',') \
     if args.scheduler_steps is not None else None
 scheduler_gamma = args.scheduler_gamma \
-    if args.scheduler_gamma is not 0 else None
+    if args.scheduler_gamma != 0 else None
 alpha = args.alpha
 temperature = args.temperature
 output_file = args.output_file if args.output_file is not None else dataset
@@ -208,7 +201,7 @@ else:
 loss_fn = nn.CrossEntropyLoss()
 acc = test(model, device, test_loader, 0, loss_fn)
 for e in range(1, epochs + 1):
-    train_kd(distilled, device, teacher_outputs, optimizer, loss_fn_kd, train_loader, alpha, temperature)
+    train_kd(distilled, device, teacher_outputs, optimizer, loss_fn_distill, train_loader, alpha, temperature)
     if scheduler:
         scheduler.step(e)
     acc = test(distilled, device, test_loader, e, loss_fn)
