@@ -24,20 +24,35 @@ def get_teacher_output(teacher_model, device, data_loader):
 
 
 def loss_fn_distill(outputs, labels, teacher_outputs, alpha, T):
-    loss = torch.softmax(teacher_outputs / T, dim=1) * (alpha) + \
-              nn.functional.cross_entropy(outputs, labels) * (1. - alpha)
+    teacher_outputs.requires_grad = True
+    loss = torch.log_softmax(teacher_outputs / T, dim=1) * (alpha) #+ \
+              #nn.functional.cross_entropy(outputs, labels) * (1. - alpha)
+    return loss.mean()
 
-    return loss
 
 
-def train_kd(model, device, teacher_outputs, optimizer, loss_fn_kd, data_loader, alpha, T):
+class CrossEntropyWithLogits(nn.Module):
+    def __init__(self, weight=None, temperature=100):
+        super(CrossEntropyWithLogits, self).__init__()
+        self.T = temperature
+
+    def forward(self, input, target):
+        if not target.is_same_size(input):
+            raise ValueError("Target size ({}) must be the same as input size ({})".format(target.size(), input.size()))
+        input = torch.softmax(input, dim=1) / self.T
+        loss = -torch.sum(target * input, 1)
+        loss = torch.unsqueeze(loss, 1)
+        return torch.mean(loss)
+
+
+def train_distilled(model, device, teacher_outputs, optimizer, loss_fn, data_loader):
     model.train()
     with tqdm(total=len(data_loader)) as t:
         for i, (data, labels) in enumerate(data_loader):
             data, labels = data.to(device), labels.to(device)
             output = model(data)
             teacher_output = teacher_outputs[i * len(data):(i + 1) * (len(data)), :]
-            loss = loss_fn_kd(output, labels, teacher_output, alpha, T)
+            loss = loss_fn(output, teacher_output)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -138,7 +153,7 @@ dataset = "mnist"
 nb_train = args.nb_train
 nb_test = args.nb_test
 include_list = list(map(int, args.include_list.split(','))) \
-    if args.include_list is not 'all' else range(10)
+    if args.include_list != 'all' else range(10)
 batch_size = args.batch_size
 lr = args.lr
 momentum = args.momentum
@@ -168,6 +183,8 @@ if dataset == 'mnist':
 
 if teacher_model_params is not None:
     model.load_state_dict(torch.load(teacher_model_params['model_path']))
+
+model.eval()
 
 kwargs_data = {
     'nb_train': nb_train,
@@ -201,7 +218,7 @@ else:
 loss_fn = nn.CrossEntropyLoss()
 acc = test(model, device, test_loader, 0, loss_fn)
 for e in range(1, epochs + 1):
-    train_kd(distilled, device, teacher_outputs, optimizer, loss_fn_distill, train_loader, alpha, temperature)
+    train_distilled(distilled, device, teacher_outputs, optimizer, CrossEntropyWithLogits(), train_loader)
     if scheduler:
         scheduler.step(e)
     acc = test(distilled, device, test_loader, e, loss_fn)
