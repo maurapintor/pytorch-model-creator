@@ -166,9 +166,12 @@ kwargs_optim_dist = {
     'lr': lr,
 }
 
+device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
+
+
 model = None
 if dataset == 'mnist':
-    model = mnist()
+    model = mnist().to(device)
 
 if teacher_model_params is not None:
     model.load_state_dict(torch.load(teacher_model_params['model_path']))
@@ -180,7 +183,6 @@ kwargs_data = {
     'batch_size': batch_size,
 }
 
-device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
 
 train_loader, valid_loader, test_loader = \
     SubsetIterator(**kwargs_data).get_train_valid_test(valid_size=0,
